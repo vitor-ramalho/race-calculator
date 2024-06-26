@@ -5,11 +5,13 @@ import { DriverModule } from './driver/driver.module';
 import { PassengerModule } from './passenger/passenger.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { join } from 'path';
+import { RaceModule } from './race/race.module';
 
 @Module({
   imports: [
     DriverModule,
     PassengerModule,
+    RaceModule,
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: 'localhost',
@@ -18,7 +20,7 @@ import { join } from 'path';
       password: '123456',
       database: 'race-calculator',
       entities: [join(__dirname, '**', '*.entity.{ts,js}')],
-      synchronize: true,
+      synchronize: false,
     }),
   ],
   controllers: [AppController],

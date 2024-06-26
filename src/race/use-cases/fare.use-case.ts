@@ -1,50 +1,33 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { IDriverRepository } from 'src/driver/repository/driver-repository.interface';
-import { IPassengerRepository } from 'src/passenger/repository/passenger-repository.interface';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable } from '@nestjs/common';
 import { CreateFareDto } from '../dto/create-fare.dto';
-
-interface FareStrategy {
-  matches(date: Date): boolean;
-  getRate(): number;
-}
-
-class WeekdayMorningFare implements FareStrategy {
-  matches(date: Date): boolean {
-    const day = date.getDay();
-    const hour = date.getHours();
-    return day >= 1 && day <= 5 && hour >= 8 && hour < 17;
-  }
-
-  getRate(): number {
-    return 2.8;
-  }
-}
+import { v4 as uuidv4 } from 'uuid';
+import { FareStrategy } from '../strategies/fare.strategy.interface';
+import { WeekdayFare } from '../strategies/weekday-fare.strategy';
+import { WeekendFare } from '../strategies/weekend-fare.strategy';
+import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 
 @Injectable()
 export class CreateFareUseCase {
   private fareStrategies: FareStrategy[];
 
-  constructor() {
-    this.fareStrategies = [new WeekdayMorningFare()];
+  constructor(private amqpConnection: AmqpConnection) {
+    this.fareStrategies = [new WeekdayFare(), new WeekendFare()];
   }
 
   execute(createFareDto: CreateFareDto) {
     const { date, currentLat, currentLng, destinationLat, destinationLng } =
       createFareDto;
-
     const distance = this.calculateDistance(
       currentLat,
       currentLng,
       destinationLat,
       destinationLng,
     );
-
     const requestDate = new Date(date);
     const fareRate = this.getFareRate(requestDate);
+    const fare = distance * fareRate;
 
-    const fare = (distance / 1000) * fareRate;
-
+    console.log(distance);
     return {
       price: fare.toFixed(2),
       requestId: uuidv4(),
@@ -54,10 +37,9 @@ export class CreateFareUseCase {
   private getFareRate(date: Date): number {
     for (const strategy of this.fareStrategies) {
       if (strategy.matches(date)) {
-        return strategy.getRate();
+        return strategy.getRate(date);
       }
     }
-
     throw new Error('No fare rate found for the given date');
   }
 
@@ -67,7 +49,7 @@ export class CreateFareUseCase {
     lat2: number,
     lon2: number,
   ): number {
-    const earthRadius = 6371e3;
+    const earthRadius = 6371;
     const lat1InRadians = (lat1 * Math.PI) / 180;
     const lat2InRadians = (lat2 * Math.PI) / 180;
     const deltaLat = ((lat2 - lat1) * Math.PI) / 180;
